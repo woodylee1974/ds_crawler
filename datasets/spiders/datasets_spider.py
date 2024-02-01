@@ -1,7 +1,7 @@
 import logging
 import re
 from typing import Any
-
+from urllib.parse import urlparse
 from scrapy.http import Request, XmlResponse, Response
 from scrapy.spiders import Spider
 from scrapy.utils.gz import gunzip, gzip_magic_number
@@ -39,7 +39,6 @@ class DatasetsSpider(Spider):
         """
         for entry in entries:
             yield entry
-
 
     def _parse_sitemap(self, response):
         if response.url.endswith("/robots.txt"):
@@ -92,10 +91,64 @@ class DatasetsSpider(Spider):
             return response.body
 
     def parse(self, response):
-        # yield {"description": response.xpath('//div[@class="description-content"]/p').xpath('string(.)').get(),
-        #        "url": response.url}
-        yield {"description": response.xpath('string(//div[@class="description-content"])').get(),
-               "url": response.url}
+        url = response.url
+        dataset_name = urlparse(url).path.split('/')[-1]
+        description = response.xpath('string(//div[@class="description-content"])').get()
+        dataloaders = response.xpath('//ul[@class="dataloader-implementations"]/div[@class="row"]')
+
+        # Extract tasks
+        tasks = list()
+        tasks_lines = response.xpath(
+            '//div[@class="col-md-12"]/ul[@class="list-unstyled"]/li/a')
+
+        if tasks_lines:
+            for task in tasks_lines:
+                task = task.xpath(
+                    './/span[@class="badge badge-primary"]/span/text()').get()
+                tasks.append(task)
+
+        # Extract Similar Datasets
+        similar_datasets = list()
+        similar_datasets_lines = response.xpath(
+            '//div[@class="card-deck card-break"]/div[@class="card"][1]/a')
+
+        if similar_datasets_lines:
+            for dataset in similar_datasets_lines:
+                dataset = dataset.xpath(
+                    './@href').get()
+                similar_datasets.append(dataset)
+
+        if tasks_lines:
+            for task in tasks_lines:
+                task = task.xpath(
+                    './/span[@class="badge badge-primary"]/span/text()').get()
+                tasks.append(task)
+
+        if dataloaders:
+            for dataloader in dataloaders:
+                # Extract dataloader name and URL
+                dataloader_url = dataloader.xpath(
+                    './/div[@class="col-md-7"]/div[@class="datal-impl-cell"]/a[@class="code-table-link"]/@href').get()
+
+                yield {
+                    "dataset_name": dataset_name,
+                    "url": url,
+                    "description": description,
+                    "dataloader_url": dataloader_url if dataloader_url else None,
+                    "tasks": tasks,
+                    "similar_datasets": similar_datasets
+
+                }
+        else:
+            # If no dataloaders found, yield a default entry with empty dataloader fields
+            yield {
+                "dataset_name": dataset_name,
+                "url": url,
+                "description": description,
+                "dataloader_url": None,
+                "tasks": tasks,
+                "similar_datasets": similar_datasets
+            }
 
 
 def regex(x):
