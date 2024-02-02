@@ -96,11 +96,15 @@ class DatasetsSpider(Spider):
         description = response.xpath('string(//div[@class="description-content"])').get()
         dataloaders = response.xpath('//ul[@class="dataloader-implementations"]/div[@class="row"]')
 
+        # # debug
+        # filename = f'./a.html'
+        # with open(filename, 'wb') as f:
+        #     f.write(response.body)
+
         # Extract tasks
         tasks = list()
         tasks_lines = response.xpath(
             '//div[@class="col-md-12"]/ul[@class="list-unstyled"]/li/a')
-
         if tasks_lines:
             for task in tasks_lines:
                 task = task.xpath(
@@ -111,44 +115,43 @@ class DatasetsSpider(Spider):
         similar_datasets = list()
         similar_datasets_lines = response.xpath(
             '//div[@class="card-deck card-break"]/div[@class="card"][1]/a')
-
         if similar_datasets_lines:
             for dataset in similar_datasets_lines:
                 dataset = dataset.xpath(
                     './@href').get()
                 similar_datasets.append(dataset)
 
-        if tasks_lines:
-            for task in tasks_lines:
-                task = task.xpath(
-                    './/span[@class="badge badge-primary"]/span/text()').get()
-                tasks.append(task)
+        # Extract Paper Count
+        paper_info = response.xpath(
+            ".//div[@id='datatable-papers_info']/text()").get()
+        # paper_count_match = re.search(r'(\d+(,\d+)*)\s*papers', paper_info)
+        # # If a match is found, extract the paper count
+        # if paper_count_match:
+        #     paper_count = paper_count_match.group(1).replace(',', '')
+        # else:
+        #     paper_count = None
+
+        dataloaders_list = []
 
         if dataloaders:
             for dataloader in dataloaders:
                 # Extract dataloader name and URL
                 dataloader_url = dataloader.xpath(
                     './/div[@class="col-md-7"]/div[@class="datal-impl-cell"]/a[@class="code-table-link"]/@href').get()
-
-                yield {
-                    "dataset_name": dataset_name,
-                    "url": url,
-                    "description": description,
-                    "dataloader_url": dataloader_url if dataloader_url else None,
-                    "tasks": tasks,
-                    "similar_datasets": similar_datasets
-
-                }
-        else:
-            # If no dataloaders found, yield a default entry with empty dataloader fields
-            yield {
-                "dataset_name": dataset_name,
-                "url": url,
-                "description": description,
-                "dataloader_url": None,
-                "tasks": tasks,
-                "similar_datasets": similar_datasets
-            }
+                if dataloader_url:
+                    data_source = re.sub(r"\s+", "", dataloader.xpath(
+                        './/a[@class="code-table-link"]/text()[3]').get())
+                    dataloaders_list.append({"data_source": data_source,
+                                             "url": dataloader_url})
+        yield {
+            "dataset_name": dataset_name,
+            "url": url,
+            "description": description,
+            "paper_count": paper_info,
+            "dataloaders": dataloaders_list,
+            "tasks": tasks,
+            "similar_datasets": similar_datasets
+        }
 
 
 def regex(x):
